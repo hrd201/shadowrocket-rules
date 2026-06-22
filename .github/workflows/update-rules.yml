@@ -41,15 +41,18 @@ jobs:
           git diff --check
           test -s hrd201-sr.conf
           cmp -s hrd201-sr.conf hrd201-sr-v2.conf
+          test -s clash/johnshall-reject.yaml
+          test -s clash/johnshall-direct.yaml
+          test -s clash/johnshall-proxy.yaml
 
       - name: Commit updates
         run: |
-          if git diff --quiet -- hrd201-sr.conf hrd201-sr-v2.conf; then
+          if git diff --quiet -- hrd201-sr.conf hrd201-sr-v2.conf clash/; then
             echo "Rules are already current."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add hrd201-sr.conf hrd201-sr-v2.conf
+          git add hrd201-sr.conf hrd201-sr-v2.conf clash/
           git commit -m "chore: update generated Shadowrocket rules"
           git push

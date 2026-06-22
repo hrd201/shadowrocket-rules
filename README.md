@@ -23,6 +23,11 @@ The build fails without replacing the existing configuration if the upstream
 file is missing expected sections, contains an unexpected final policy, is too
 small, or loses any required local marker.
 
+The same build converts the upstream Shadowrocket policies into three Clash
+classical providers under `clash/`: `johnshall-reject.yaml`,
+`johnshall-direct.yaml`, and `johnshall-proxy.yaml`. Policy fields are removed
+from provider entries, while `FINAL` and nested `RULE-SET` entries are excluded.
+
 Edit the files under `custom/` instead of editing generated `.conf` files.
 
 ## Subscription

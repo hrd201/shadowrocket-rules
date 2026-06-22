@@ -19,6 +19,11 @@ DEFAULT_UPSTREAM = (
 SECTION_RE = re.compile(r"^\[([^]]+)]\s*$", re.MULTILINE)
 MIN_UPSTREAM_RULES = 10_000
 MAX_UPSTREAM_BYTES = 40 * 1024 * 1024
+CLASH_POLICY_MINIMUMS = {
+    "reject": 10_000,
+    "direct": 100,
+    "proxy": 100,
+}
 
 
 def fetch_upstream(url: str) -> str:
@@ -77,6 +82,57 @@ def validate_upstream(rule_lines: list[str]) -> None:
         raise RuntimeError("upstream GEOIP,CN,DIRECT rule is missing")
     if not any(line.upper() == "DOMAIN-SUFFIX,CN,DIRECT" for line in rules):
         raise RuntimeError("upstream DOMAIN-SUFFIX,cn,DIRECT rule is missing")
+
+
+def split_clash_rules(rule_lines: list[str]) -> dict[str, list[str]]:
+    """Strip Shadowrocket policies and group rules for Clash classical providers."""
+    grouped = {policy: [] for policy in CLASH_POLICY_MINIMUMS}
+    for raw_line in rule_lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        line = line.split(" #", 1)[0].strip()
+        parts = [part.strip() for part in line.split(",")]
+        policy_index = next(
+            (index for index, part in enumerate(parts) if part.lower() in grouped),
+            None,
+        )
+        if policy_index is None:
+            raise RuntimeError(f"cannot determine upstream policy: {raw_line}")
+
+        rule_type = parts[0].upper()
+        if rule_type in {"FINAL", "RULE-SET"}:
+            continue
+
+        policy = parts[policy_index].lower()
+        provider_rule = ",".join(parts[:policy_index] + parts[policy_index + 1 :])
+        if not provider_rule:
+            raise RuntimeError(f"empty Clash provider rule derived from: {raw_line}")
+        grouped[policy].append(provider_rule)
+
+    for policy, minimum in CLASH_POLICY_MINIMUMS.items():
+        count = len(grouped[policy])
+        if count < minimum:
+            raise RuntimeError(
+                f"Clash {policy} provider is unexpectedly small: {count} < {minimum}"
+            )
+    return grouped
+
+
+def render_clash_provider(policy: str, rules: list[str], upstream_url: str) -> str:
+    def quote(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
+
+    payload = "\n".join(f"  - {quote(rule)}" for rule in rules)
+    return f"""# AUTO-GENERATED FILE. DO NOT EDIT.
+# Policy: {policy.upper()}
+# Upstream: {upstream_url}
+# Upstream project: Johnshall/Shadowrocket-ADBlock-Rules-Forever
+# License: CC BY-SA 4.0. See ../LICENSE and ../NOTICE.
+payload:
+{payload}
+"""
 
 
 def fragment(root: Path, name: str) -> str:
@@ -168,6 +224,7 @@ def main() -> int:
     upstream = read_upstream(args.upstream_file, args.upstream_url)
     upstream_rules = extract_section(upstream, "Rule")
     validate_upstream(upstream_rules)
+    clash_rules = split_clash_rules(upstream_rules)
     generated = render(root, args.upstream_url, upstream_rules)
     validate_generated(generated)
 
@@ -175,9 +232,22 @@ def main() -> int:
         destination = output if output.is_absolute() else root / output
         destination.write_text(generated, encoding="utf-8", newline="\n")
 
+    clash_dir = root / "clash"
+    clash_dir.mkdir(exist_ok=True)
+    for policy, rules in clash_rules.items():
+        provider = render_clash_provider(policy, rules, args.upstream_url)
+        (clash_dir / f"johnshall-{policy}.yaml").write_text(
+            provider,
+            encoding="utf-8",
+            newline="\n",
+        )
+
     print(
         f"Generated {len(significant(upstream_rules))} upstream rules; "
-        f"output size {len(generated.encode('utf-8'))} bytes"
+        f"Shadowrocket output size {len(generated.encode('utf-8'))} bytes; "
+        + ", ".join(
+            f"Clash {policy}={len(rules)}" for policy, rules in clash_rules.items()
+        )
     )
     return 0
 
