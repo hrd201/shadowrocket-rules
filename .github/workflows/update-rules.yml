@@ -1,0 +1,55 @@
+name: Update Shadowrocket rules
+
+on:
+  schedule:
+    # 08:30 Asia/Shanghai, after the upstream nightly build.
+    - cron: "30 0 * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - "custom/**"
+      - "scripts/build_rules.py"
+      - ".github/workflows/update-rules.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-shadowrocket-rules
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build and validate
+        run: python3 scripts/build_rules.py
+
+      - name: Check generated files
+        run: |
+          git diff --check
+          test -s hrd201-sr.conf
+          cmp -s hrd201-sr.conf hrd201-sr-v2.conf
+
+      - name: Commit updates
+        run: |
+          if git diff --quiet -- hrd201-sr.conf hrd201-sr-v2.conf; then
+            echo "Rules are already current."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add hrd201-sr.conf hrd201-sr-v2.conf
+          git commit -m "chore: update generated Shadowrocket rules"
+          git push
