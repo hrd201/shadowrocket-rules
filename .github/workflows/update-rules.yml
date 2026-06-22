@@ -47,7 +47,7 @@ jobs:
 
       - name: Commit updates
         run: |
-          if git diff --quiet -- hrd201-sr.conf hrd201-sr-v2.conf clash/; then
+          if [ -z "$(git status --short -- hrd201-sr.conf hrd201-sr-v2.conf clash/)" ]; then
             echo "Rules are already current."
             exit 0
           fi
