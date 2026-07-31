@@ -1,0 +1,9 @@
+# Albion Online official services.
+DOMAIN-SUFFIX,albiononline.com
+DOMAIN-SUFFIX,albiononline2d.com
+DOMAIN-SUFFIX,albion.zone
+
+# Game traffic that may connect directly by IP after login.
+DST-PORT,5055
+DST-PORT,5056
+DST-PORT,4535
