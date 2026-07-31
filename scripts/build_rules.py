@@ -145,6 +145,28 @@ def fragment(root: Path, name: str) -> str:
     return data
 
 
+def validate_albion_rule_set(root: Path) -> None:
+    rules = significant(
+        (root / "rules" / "albion.list").read_text(encoding="utf-8").splitlines()
+    )
+    required = {
+        "DOMAIN-SUFFIX,albiononline.com",
+        "DOMAIN-SUFFIX,albiononline2d.com",
+        "DOMAIN-SUFFIX,albion.zone",
+        "DST-PORT,5055",
+        "DST-PORT,5056",
+        "DST-PORT,4535",
+    }
+    missing = required.difference(rules)
+    if missing:
+        raise RuntimeError(
+            "Albion rule set is missing required entries: "
+            + ", ".join(sorted(missing))
+        )
+    if any(rule.count(",") > 1 for rule in rules):
+        raise RuntimeError("Albion rule-set entries must not embed a policy")
+
+
 def render(root: Path, upstream_url: str, upstream_rules: list[str]) -> str:
     upstream_body = "\n".join(upstream_rules).strip()
     return f"""# AUTO-GENERATED FILE. Edit custom/* or scripts/build_rules.py instead.
@@ -163,6 +185,9 @@ def render(root: Path, upstream_url: str, upstream_rules: list[str]) -> str:
 {upstream_body}
 # Daily-generated upstream rules end here.
 
+[Proxy Group]
+{fragment(root, 'proxy-group.conf')}
+
 [URL Rewrite]
 {fragment(root, 'url-rewrite.conf')}
 
@@ -178,7 +203,15 @@ def render(root: Path, upstream_url: str, upstream_rules: list[str]) -> str:
 
 
 def validate_generated(config: str) -> None:
-    required_sections = ["General", "Rule", "URL Rewrite", "Script", "Map Local", "MITM"]
+    required_sections = [
+        "General",
+        "Rule",
+        "Proxy Group",
+        "URL Rewrite",
+        "Script",
+        "Map Local",
+        "MITM",
+    ]
     found = SECTION_RE.findall(config)
     if found != required_sections:
         raise RuntimeError(f"unexpected section order: {found}")
@@ -195,6 +228,10 @@ def validate_generated(config: str) -> None:
     required_markers = [
         "DOMAIN,jpn.201pc.win,DIRECT",
         "IP-CIDR,67.230.172.130/32,DIRECT,no-resolve",
+        "DOMAIN,hk.201pc.win,DIRECT",
+        "IP-CIDR,103.218.240.216/32,DIRECT,no-resolve",
+        "RULE-SET,https://raw.githubusercontent.com/hrd201/shadowrocket-rules/main/rules/albion.list,Albion",
+        "Albion = select,HK-Hysteria2,PROXY,DIRECT",
         "DOMAIN,ads3-normal-lq.zijieapi.com,REJECT",
         "DOMAIN,adse.ximalaya.com,REJECT",
         "redfruit.ad.response =",
@@ -224,6 +261,7 @@ def main() -> int:
     upstream = read_upstream(args.upstream_file, args.upstream_url)
     upstream_rules = extract_section(upstream, "Rule")
     validate_upstream(upstream_rules)
+    validate_albion_rule_set(root)
     clash_rules = split_clash_rules(upstream_rules)
     generated = render(root, args.upstream_url, upstream_rules)
     validate_generated(generated)
