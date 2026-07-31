@@ -6,6 +6,8 @@ output of [Johnshall/Shadowrocket-ADBlock-Rules-Forever](https://github.com/John
 The generated configuration keeps these local rules ahead of the upstream base:
 
 - direct routing for the `jpn` and `nf` proxy endpoints
+- direct routing for the `hk` endpoint to prevent proxy loops
+- a standalone Albion Online rule set with a selectable `Albion` policy group
 - YouTube response processing and QUIC blocking
 - Red Fruit ad-domain and response handling
 - Ximalaya startup-ad filtering
