@@ -9,6 +9,7 @@ on:
       - main
     paths:
       - "custom/**"
+      - "rules/**"
       - "scripts/build_rules.py"
       - ".github/workflows/update-rules.yml"
   workflow_dispatch:
